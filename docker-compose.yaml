@@ -1,0 +1,44 @@
+version: "3.9"
+
+networks:
+  development:
+    driver: bridge
+
+services:
+  #############
+  ## Backend ##
+  #############
+
+  pregonero:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: pregonero:1.0
+    env_file:
+      - .env
+    expose:
+      - 3030
+    networks:
+      - development
+    depends_on:
+      - redis
+    container_name: pregonero-server
+
+  #################
+  ## Persistence ##
+  #################
+
+  redis:
+    image: redis:6-alpine
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+    ports:
+      - 6379:6379
+    networks:
+      - development
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 1s
+      retries: 15
+    container_name: pregonero-redis

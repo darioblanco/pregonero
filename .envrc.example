@@ -1,0 +1,15 @@
+#!/bin/bash
+
+export IMAP_HOST=127.0.0.1
+
+export IMAP_PORT=993
+
+export USERNAME=secret
+
+export PASSWORD=secret
+
+export LOG_LEVEL=info
+
+export REDIS_URL=localhost
+
+export VERSION=experimental
