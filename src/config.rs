@@ -16,8 +16,9 @@ impl Environment for SystemEnvironment {
 #[derive(Clone, Debug)]
 pub struct Config {
 	pub imap_server: String,
-	pub username: String,
-	pub password: String,
+	pub imap_username: String,
+	pub imap_password: String,
+	pub imap_mailbox: String,
 	pub log_level: Level,
 	pub redis_server: String,
 	pub version: String,
@@ -33,12 +34,15 @@ impl Config {
 			.unwrap_or_else(|_| "993".to_string())
 			.parse()
 			.unwrap_or(993);
-		let username = env
-			.get_var("USERNAME")
+		let imap_username = env
+			.get_var("IMAP_USERNAME")
 			.unwrap_or_else(|_| "".to_string());
-		let password = env
-			.get_var("PASSWORD")
+		let imap_password = env
+			.get_var("IMAP_PASSWORD")
 			.unwrap_or_else(|_| "".to_string());
+		let imap_mailbox = env
+			.get_var("IMAP_MAILBOX")
+			.unwrap_or_else(|_| "inbox".to_string());
 		let log_level = env
 			.get_var("LOG_LEVEL")
 			.unwrap_or_else(|_| "info".to_string());
@@ -72,8 +76,9 @@ impl Config {
 
 		Config {
 			imap_server,
-			username,
-			password,
+			imap_username,
+			imap_password,
+			imap_mailbox,
 			log_level,
 			redis_server,
 			version,
@@ -83,8 +88,9 @@ impl Config {
 	pub fn from_params(version: String) -> Config {
 		Config {
 			imap_server: "127.0.0.1:993".to_string().parse().unwrap(),
-			username: "username".to_string(),
-			password: "password".to_string(),
+			imap_username: "username".to_string(),
+			imap_password: "password".to_string(),
+			imap_mailbox: "inbox".to_string(),
 			log_level: Level::INFO,
 			redis_server: "redis://127.0.0.1:6359".to_string().parse().unwrap(),
 			version,
@@ -114,8 +120,9 @@ mod tests {
 		let mut vars = std::collections::HashMap::new();
 		vars.insert("IMAP_HOST".to_string(), "myimaphost".to_string());
 		vars.insert("IMAP_PORT".to_string(), "143".to_string());
-		vars.insert("USERNAME".to_string(), "myuser".to_string());
-		vars.insert("PASSWORD".to_string(), "secret".to_string());
+		vars.insert("IMAP_USERNAME".to_string(), "myuser".to_string());
+		vars.insert("IMAP_PASSWORD".to_string(), "secret".to_string());
+		vars.insert("IMAP_MAILBOX".to_string(), "mymailbox".to_string());
 		vars.insert("LOG_LEVEL".to_string(), "warn".to_string());
 		vars.insert("REDIS_HOST".to_string(), "myredishost".to_string());
 		vars.insert("REDIS_PORT".to_string(), "6359".to_string());
@@ -123,8 +130,9 @@ mod tests {
 		let env = MockEnvironment { vars };
 		let config = Config::from_env(&env);
 		assert_eq!(config.imap_server, "myimaphost:143".to_string());
-		assert_eq!(config.username, "myuser");
-		assert_eq!(config.password, "secret");
+		assert_eq!(config.imap_username, "myuser");
+		assert_eq!(config.imap_password, "secret");
+		assert_eq!(config.imap_mailbox, "mymailbox");
 		assert_eq!(config.log_level, Level::WARN);
 		assert_eq!(
 			config.redis_server.to_string(),
@@ -137,8 +145,9 @@ mod tests {
 	fn test_config_from_params() {
 		let config = Config::from_params("test".to_string());
 		assert_eq!(config.imap_server, "127.0.0.1:993".to_string());
-		assert_eq!(config.username, "username");
-		assert_eq!(config.password, "password");
+		assert_eq!(config.imap_username, "username");
+		assert_eq!(config.imap_password, "password");
+		assert_eq!(config.imap_mailbox, "inbox");
 		assert_eq!(config.log_level, Level::INFO);
 		assert_eq!(
 			config.redis_server.to_string(),

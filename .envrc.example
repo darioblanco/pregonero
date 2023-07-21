@@ -4,9 +4,11 @@ export IMAP_HOST=127.0.0.1
 
 export IMAP_PORT=993
 
-export USERNAME=secret
+export IMAP_USERNAME=secret
 
-export PASSWORD=secret
+export IMAP_PASSWORD=secret
+
+export IMAP_MAILBOX=inbox
 
 export LOG_LEVEL=info
 
