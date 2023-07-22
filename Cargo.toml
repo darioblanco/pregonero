@@ -5,24 +5,20 @@ authors = ["Dario Blanco Iturriaga"]
 edition = "2021"
 
 [dependencies]
-bytes = "1"
-futures-util = "0.3.8"
-futures-sink = "0.3.8"
-imap-proto = "0.16.2"
-mailparse = "0.14.0"
-nom = "7"
-pin-project = "1"
-redis = { version = "0.23", features = ["aio", "tokio-comp"] }
-tokio = { version = "1", features = ["full"] }
-tokio-rustls = "0.24"
-tokio-util = { version = "0.7.0", features = ["codec"] }
-tracing = "0.1"
-tracing-subscriber = "0.3"
-webpki-roots = "0.22.1"
-quoted_printable = "0.5.0"
-regex = "1"
+anyhow = "1"
+async-imap = { version = "0.9.0", default-features = false, features = ["runtime-tokio"] }
+async-native-tls = { version = "0.5.0", default-features = false, features = ["runtime-tokio"] }
 encoding = "0.2.33"
-base64 = "0.21.2"
+futures = "0.3.28"
+html2text = "0.6.0"
+itertools = "0.11.0"
+mailparse = "0.14.0"
+quoted_printable = "0.5.0"
+redis = { version = "0.23", features = ["aio", "tokio-comp"] }
+regex = "1.9.1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [lib]
 name = "pregonero"

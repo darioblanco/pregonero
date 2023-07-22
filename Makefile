@@ -13,6 +13,9 @@ COMPOSE := $(shell command -v podman-compose 2> /dev/null || command -v docker-c
 help: ## list available commands
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
+format: init ## format the code
+	cargo fmt
+
 init: ## verify that all the required commands are already installed
 	@if [ -z "$$CI" ]; then \
 		function cmd { \
