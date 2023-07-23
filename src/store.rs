@@ -171,9 +171,9 @@ impl Store for RedisStore {
         match last_sequence {
             Some(last_sequence_string) => match last_sequence_string.parse::<u32>() {
                 Ok(last_sequence) => Ok(last_sequence),
-                Err(_) => Ok(0),
+                Err(_) => Ok(1),
             },
-            None => Ok(0),
+            None => Ok(1),
         }
     }
 

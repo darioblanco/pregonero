@@ -41,11 +41,11 @@ pub async fn main() -> Result<()> {
         Arc::new(queue::RedisQueue::new(config.redis_server.to_string()).await);
     info!("Queue set up at {}", config.redis_server);
 
-    let accounts_res = store.load_accounts_by_host("icloud.com".to_string()).await;
-    let mut tasks = vec![];
+    let accounts_res = store.load_accounts_by_host("*".to_string()).await;
     match accounts_res {
         Ok(accounts) => {
             debug!("Accounts loaded: {:?}", accounts);
+            let mut tasks = vec![];
             for account in accounts {
                 let task = task::spawn(imap::idle_inbox(
                     account.clone(),
@@ -54,18 +54,13 @@ pub async fn main() -> Result<()> {
                 ));
                 tasks.push(task);
             }
+            // Await all tasks to finish
+            for task in tasks {
+                let _ = task.await.unwrap();
+            }
         }
         Err(e) => {
             error!("Error while loading accounts: {:?}", e);
-        }
-    }
-
-    // Fetch tasks are executing indefinitely as they have an infinite loop each
-    // Each account has a fetch task, so this can scale to a lot of accounts
-    for task in tasks {
-        if let Err(e) = task.await {
-            // Handle errors gracefully
-            error!("Error in task: {:?}", e);
         }
     }
 

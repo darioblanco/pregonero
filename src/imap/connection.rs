@@ -26,28 +26,48 @@ async fn get_session(account: Account) -> Result<Session<TlsStream<TcpStream>>> 
     let client = async_imap::Client::new(tls_stream);
     debug!("-- connected to {}:{}", account.imap_host, 993);
 
-    // the client we have here is unauthenticated.
-    // to do anything useful with the e-mails, we need to log in
-    let mut imap_session = client
+    let login_result = client
         .login(account.email.clone(), account.password.clone())
-        .await
-        .map_err(|e| e.0)?;
-    debug!("-- logged in a {}", account.email);
+        .await;
+    match login_result {
+        Ok(session) => {
+            // Successfully logged in, continue with the session
+            let mut imap_session = session;
+            debug!("-- logged in a {}", account.email);
 
-    let server_capabilities = imap_session.capabilities().await?;
-    debug!(
-        "-- Advertised server capabilities: {:?}",
-        server_capabilities
-            .iter()
-            .map(|s| format!("{:?}", s))
-            .join(", ")
-    );
+            let server_capabilities = imap_session.capabilities().await?;
+            debug!(
+                "-- Advertised server capabilities: {:?}",
+                server_capabilities
+                    .iter()
+                    .map(|s| format!("{:?}", s))
+                    .join(", ")
+            );
 
-    // Select the INBOX mailbox
-    imap_session.select(account.mailbox.clone()).await?;
-    debug!("-- INBOX selected");
+            let mailboxes_stream = imap_session.list(Some(""), Some("*")).await?;
+            let mailboxes: Vec<Result<Name, async_imap::error::Error>> =
+                mailboxes_stream.collect().await;
 
-    return Ok(imap_session);
+            for mailbox in mailboxes {
+                match mailbox {
+                    Ok(mailbox) => debug!("mailbox found: {:?}", mailbox.name()),
+                    Err(e) => debug!("error: {:?}", e),
+                }
+            }
+
+            // Select the INBOX mailbox
+            imap_session.select(account.mailbox.clone()).await?;
+            debug!("-- INBOX selected");
+
+            Ok(imap_session)
+        }
+        Err(error) => {
+            // Handle the error here, e.g., print an error message or return an error
+            error!("Error while logging in: {:?}", error);
+            // You can choose to return an error or perform other actions here
+            Err(anyhow::Error::msg("Failed to log in"))
+        }
+    }
 }
 
 // pub async fn get_mailboxes(imap_session: Session<TlsStream<TcpStream>>) -> Result<()> {
@@ -68,8 +88,8 @@ pub async fn idle_inbox(
     store: Arc<dyn store::Store>,
     queue: Arc<dyn queue::Queue>,
 ) -> Result<()> {
-    // Idle for new email messages (unless interrupted or timed out)
     loop {
+        // Idle for new email messages (unless interrupted or timed out)
         let mut imap_session = get_session(account.clone()).await?;
         debug!(
             "-- logged in with account {}",
@@ -102,12 +122,12 @@ pub async fn idle_inbox(
             ManualInterrupt => {
                 // This could be a timeout from the client (our sleep function)
                 debug!("-- IDLE manually interrupted");
-                continue; // restart infinite loop, fetching at the beginning of the loop
+                // continue; // restart infinite loop, fetching at the beginning of the loop
             }
             Timeout => {
                 // This is a timeout from the server
                 debug!("-- IDLE timed out");
-                continue; // restart infinite loop, fetching at the beginning of the loop
+                // continue; // restart infinite loop, fetching at the beginning of the loop
             }
             NewData(data) => {
                 // The mailbox has received an update, it is time to trigger fetch
@@ -124,6 +144,10 @@ pub async fn idle_inbox(
         // be nice to the server and log out
         debug!("-- logging out");
         imap_session.logout().await?;
+
+        // Introduce a delay before the next iteration to avoid busy-waiting
+        // This delay could be a bit longer to prevent bans, or even randomized
+        tokio::time::sleep(Duration::from_secs(30)).await;
     }
 }
 
