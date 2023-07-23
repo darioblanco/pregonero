@@ -1,5 +1,6 @@
 # TODO
 
 - [ ] Hash/Encrypt passwords
-- [ ] Queue backend
-- [ ] Generic Redis store
+- [ ] Asynchronous capabilities
+- [x] Queue backend
+- [x] Generic Redis store
