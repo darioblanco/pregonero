@@ -5,9 +5,8 @@ use tracing::{debug, error, info};
 
 use anyhow::Result;
 
-pub mod codecs;
 pub mod config;
-pub mod email;
+pub mod imap;
 pub mod store;
 
 #[tokio::main]
@@ -50,8 +49,13 @@ pub async fn main() -> Result<()> {
         Ok(accounts) => {
             debug!("Accounts loaded: {:?}", accounts);
             for account in accounts {
-                let res =
-                    email::fetch_inbox(&account.imap_host, &account.email, &account.password).await;
+                let res = imap::fetch_inbox(
+                    &account.imap_host,
+                    &account.email,
+                    &account.password,
+                    &account.mailbox,
+                )
+                .await;
 
                 match res {
                     Ok(_) => debug!("Messages loaded: {:?}", res),

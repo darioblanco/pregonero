@@ -34,3 +34,45 @@ pub fn decode_rfc2047(input: &str) -> Result<String, Box<dyn std::error::Error>>
         _ => Err(format!("Unsupported charset: {}", charset).into()),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_decode_rfc2047_valid_q_encoded_utf8() {
+        let input = "=?UTF-8?Q?This_is_a_test?=";
+        let result = decode_rfc2047(input);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "This is a test");
+    }
+
+    #[test]
+    fn test_decode_rfc2047_valid_q_encoded_iso_8859_1() {
+        let input = "=?ISO-8859-1?Q?This_is_a_test?=";
+        let result = decode_rfc2047(input);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "This is a test");
+    }
+
+    #[test]
+    fn test_decode_rfc2047_invalid_encoding() {
+        let input = "=?UTF-8?Z?Invalid_encoding?=";
+        let result = decode_rfc2047(input);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decode_rfc2047_unsupported_charset() {
+        let input = "=?UNSUPPORTED?Q?Unsupported_charset?=";
+        let result = decode_rfc2047(input);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decode_rfc2047_not_rfc2047() {
+        let input = "Not a RFC2047 encoded-word";
+        let result = decode_rfc2047(input);
+        assert!(result.is_err());
+    }
+}

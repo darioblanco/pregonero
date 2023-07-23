@@ -1,13 +1,9 @@
-use anyhow::Result;
-use futures::{StreamExt, TryStreamExt};
+use async_imap::{imap_proto::Envelope, types::Fetch};
 use itertools::Itertools;
 use std::fmt;
-
-use async_imap::{imap_proto::Envelope, types::Name};
-use tokio::net::TcpStream;
 use tracing::{debug, error};
 
-use crate::codecs;
+use super::codecs;
 
 #[derive(Debug)]
 pub struct Message {
@@ -45,83 +41,35 @@ impl fmt::Display for Address {
     }
 }
 
-pub async fn fetch_inbox(imap_server: &str, login: &str, password: &str) -> Result<Vec<Message>> {
-    let imap_addr = (imap_server, 993);
-    let tcp_stream = TcpStream::connect(imap_addr).await?;
-    let tls = async_native_tls::TlsConnector::new();
-    let tls_stream = tls.connect(imap_server, tcp_stream).await?;
+pub fn parse_message(account: String, raw_message: &Fetch) -> Option<Message> {
+    let mut message = Message {
+        account,
+        senders: Vec::<Address>::new(),
+        subject: "".to_string(),
+        body: "".to_string(),
+    };
 
-    let client = async_imap::Client::new(tls_stream);
-    debug!("-- connected to {}:{}", imap_addr.0, imap_addr.1);
-
-    // the client we have here is unauthenticated.
-    // to do anything useful with the e-mails, we need to log in
-    let mut imap_session = client.login(login, password).await.map_err(|e| e.0)?;
-    debug!("-- logged in a {}", login);
-
-    let mailboxes_stream = imap_session.list(Some(""), Some("*")).await?;
-    let mailboxes: Vec<Result<Name, async_imap::error::Error>> = mailboxes_stream.collect().await;
-
-    for mailbox in mailboxes {
-        match mailbox {
-            Ok(mailbox) => debug!("mailbox found: {:?}", mailbox.name()),
-            Err(e) => debug!("error: {:?}", e),
+    match raw_message.text() {
+        Some(text) => message.body = parse_text(text),
+        None => {
+            debug!("message did not have a text!");
+            // Unable to parse any type of message, go to the next one
+            return None;
         }
     }
-
-    // we want to fetch the first email in the INBOX mailbox
-    imap_session.select("INBOX").await?;
-    debug!("-- INBOX selected");
-
-    // fetch message number 1 in this mailbox, along with its RFC822 field.
-    // RFC 822 dictates the format of the body of e-mails
-    // let messages_stream = imap_session.fetch("1", "RFC822").await?;
-
-    // fetch all messages from the inbox (1:*)
-    let messages_stream = imap_session
-        .fetch(
-            "1:*",
-            "(FLAGS INTERNALDATE RFC822.SIZE BODY.PEEK[TEXT] ENVELOPE)",
-        )
-        .await?;
-    let messages: Vec<_> = messages_stream.try_collect().await?;
-    let mut parsed_messages = Vec::<Message>::new();
-    for message in messages.iter() {
-        let mut parsed_message = Message {
-            account: login.to_string(),
-            senders: Vec::<Address>::new(),
-            subject: "".to_string(),
-            body: "".to_string(),
-        };
-        match message.text() {
-            Some(text) => parsed_message.body = parse_text(text),
-            None => {
-                debug!("message did not have a text!");
-                // Unable to parse any type of message, go to the next one
-                continue;
-            }
+    match raw_message.envelope() {
+        Some(envelope) => {
+            message.senders = parse_sender(envelope);
+            message.subject = parse_subject(envelope);
         }
-        match message.envelope() {
-            Some(envelope) => {
-                parsed_message.senders = parse_sender(envelope);
-                parsed_message.subject = parse_subject(envelope);
-            }
-            None => {
-                debug!("message did not have an envelope!");
-                // Unable to parse any type of envelope, go to the next one
-                continue;
-            }
+        None => {
+            debug!("message did not have an envelope!");
+            // Unable to parse any type of envelope, go to the next one
+            return None;
         }
-        debug!("message parsed: {}", parsed_message);
-        parsed_messages.push(parsed_message);
     }
-
-    println!("-- {} messages processed, logging out", messages.len());
-
-    // be nice to the server and log out
-    imap_session.logout().await?;
-
-    Ok(parsed_messages)
+    debug!("message parsed: {}", message);
+    return Some(message);
 }
 
 fn parse_sender(envelope: &Envelope<'_>) -> Vec<Address> {
