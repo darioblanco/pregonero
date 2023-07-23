@@ -44,7 +44,7 @@ build: init ## build the app
 coverage: init ## test the app with coverage enabled
 	cargo tarpaulin --exclude-files src/main.rs
 
-start: init redis-start build ## start the app
+start: init build ## start the app
 	RUST_LOG=info ./target/release/pregonero
 
 ifdef CI

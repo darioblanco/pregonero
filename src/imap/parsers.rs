@@ -1,19 +1,20 @@
 use async_imap::{imap_proto::Envelope, types::Fetch};
 use itertools::Itertools;
+use serde_derive::{Deserialize, Serialize};
 use std::fmt;
 use tracing::{debug, error};
 
 use super::codecs;
 
-#[derive(Debug)]
-pub struct Message {
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct EmailMessage {
     pub account: String,
     pub senders: Vec<Address>,
     pub subject: String,
     pub body: String,
 }
 
-impl fmt::Display for Message {
+impl fmt::Display for EmailMessage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -26,7 +27,7 @@ impl fmt::Display for Message {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Address {
     pub name: Option<String>,
     pub email: String,
@@ -41,8 +42,8 @@ impl fmt::Display for Address {
     }
 }
 
-pub fn parse_message(account: String, raw_message: &Fetch) -> Option<Message> {
-    let mut message = Message {
+pub fn parse_message(account: String, raw_message: &Fetch) -> Option<EmailMessage> {
+    let mut message = EmailMessage {
         account,
         senders: Vec::<Address>::new(),
         subject: "".to_string(),

@@ -12,7 +12,7 @@ pub async fn fetch_inbox(
     login: &str,
     password: &str,
     mailbox: &str,
-) -> Result<Vec<parsers::Message>> {
+) -> Result<Vec<parsers::EmailMessage>> {
     let imap_addr = (imap_server, 993);
     let tcp_stream = TcpStream::connect(imap_addr).await?;
     let tls = async_native_tls::TlsConnector::new();
@@ -52,7 +52,7 @@ pub async fn fetch_inbox(
         )
         .await?;
     let raw_messages: Vec<_> = messages_stream.try_collect().await?;
-    let mut messages = Vec::<parsers::Message>::new();
+    let mut messages = Vec::<parsers::EmailMessage>::new();
     for raw_message in raw_messages.iter() {
         let message = parsers::parse_message(login.to_string(), raw_message);
         match message {

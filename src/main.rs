@@ -1,3 +1,4 @@
+use queue::Queue;
 use std::sync::Arc;
 use store::Store;
 
@@ -7,6 +8,7 @@ use anyhow::Result;
 
 pub mod config;
 pub mod imap;
+pub mod queue;
 pub mod store;
 
 #[tokio::main]
@@ -22,7 +24,7 @@ pub async fn main() -> Result<()> {
         // .with_max_level(config.log_level)
         .init();
 
-    info!("Initializing config with {:?}", config);
+    info!("Initialized config with {:?}", config);
 
     info!("Loading Store...");
     let store: Arc<dyn Store> =
@@ -43,6 +45,12 @@ pub async fn main() -> Result<()> {
             return Err(e);
         }
     }
+    info!("Stored and accounts loaded.");
+
+    info!("Loading Queue...");
+    let queue: Arc<dyn Queue> =
+        Arc::new(queue::RedisQueue::new(config.redis_server.to_string()).await);
+    info!("Connected to Queue");
 
     let accounts_res = store.load_accounts_by_host("icloud.com".to_string()).await;
     match accounts_res {
@@ -58,13 +66,19 @@ pub async fn main() -> Result<()> {
                 .await;
 
                 match res {
-                    Ok(_) => debug!("Messages loaded: {:?}", res),
+                    Ok(messages) => {
+                        for email_message in messages {
+                            queue
+                                .publish_message(queue::QueueMessage { email_message })
+                                .await?;
+                        }
+                    }
                     Err(e) => error!("Error while fetching inbox: {:?}", e),
                 }
             }
         }
         Err(e) => {
-            info!("Error while loading accounts for 'icloud.com': {:?}", e);
+            error!("Error while loading accounts for 'icloud.com': {:?}", e);
         }
     }
 

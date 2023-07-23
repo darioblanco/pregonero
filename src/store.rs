@@ -51,12 +51,6 @@ impl RedisStore {
     pub async fn new(connection_url: String) -> Self {
         let client = redis::Client::open(connection_url).unwrap();
 
-        // Test the connection
-        let mut con = client.get_async_connection().await.unwrap();
-        let _: () = con.set("test_key", "test_value").await.unwrap();
-        let result: String = con.get("test_key").await.unwrap();
-        println!("Redis test_key: {}", result);
-
         Self {
             redis_client: Arc::new(client),
         }
