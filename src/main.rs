@@ -26,7 +26,8 @@ pub async fn main() -> Result<()> {
     info!("Initializing config with {:?}", config);
 
     info!("Loading Store...");
-    let store = Arc::new(store::RedisStore::new(config.redis_server.to_string()).await);
+    let store: Arc<dyn Store> =
+        Arc::new(store::RedisStore::new(config.redis_server.to_string()).await);
     debug!("Load test account into the store");
     let stored_account = store
         .store_account(store::Account {

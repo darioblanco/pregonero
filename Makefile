@@ -47,17 +47,38 @@ coverage: init ## test the app with coverage enabled
 start: init redis-start build ## start the app
 	RUST_LOG=info ./target/release/pregonero
 
-test: init ## test the app
+ifdef CI
+# run tests with coverage in a CI environment
+test:
 	cargo test
+else
+test: init ## run tests in the local environment, creating and destroying the test db
+	@$(MAKE) redis-test-start --quiet > /dev/null 2>&1
+	cargo test
+	@$(MAKE) redis-test-stop --quiet > /dev/null 2>&1
 
-#############
-# Container #
-#############
+endif
 
-.PHONY: redis-attach redis-start
+#########
+# Redis #
+#########
+
+.PHONY: redis-attach redis-start redis-stop redis-test-attach redis-test-start redis-test-stop
 
 redis-attach: init ## attach to the redis container
-	$(COMPOSE) exec redis sh
+	$(COMPOSE) exec redis redis-cli
 
 redis-start: init ## start and attach to the redis container
 	$(COMPOSE) up -d redis
+
+redis-stop: init ## stop the redis container
+	$(COMPOSE) down redis
+
+redis-test-attach: init ## attach to the redis container
+	$(COMPOSE) exec redis-test redis-cli
+
+redis-test-start: init ## start and attach to the redis container
+	$(COMPOSE) up -d redis-test
+
+redis-test-stop: init ## stop the redis container
+	$(COMPOSE) down redis-test

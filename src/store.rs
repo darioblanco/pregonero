@@ -6,7 +6,7 @@ use std::fmt;
 use std::sync::Arc;
 use tracing::debug;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Account {
     pub email: String,
     pub password: String,
@@ -161,5 +161,93 @@ impl Store for RedisStore {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_store_account_and_load_by_email_and_destroy() {
+        let store = RedisStore::new("redis://localhost:6380/0".to_string()).await;
+
+        let account = Account {
+            email: "test@test.com".to_string(),
+            password: "password".to_string(),
+            mailbox: "INBOX".to_string(),
+            imap_host: "imap.test.com".to_string(),
+        };
+
+        // Store the account
+        let stored_account_result = store.store_account(account.clone()).await.unwrap();
+        assert!(stored_account_result.is_some());
+
+        // Load the account by email
+        let loaded_account = store
+            .load_account_by_email(account.email.clone())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(loaded_account.email, account.email);
+        assert_eq!(loaded_account.password, account.password);
+        assert_eq!(loaded_account.mailbox, account.mailbox);
+        assert_eq!(loaded_account.imap_host, account.imap_host);
+
+        // Destroy the account
+        store.destroy_account(account.email.clone()).await.unwrap();
+        assert_eq!(
+            store
+                .load_account_by_email(account.email.clone())
+                .await
+                .unwrap(),
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn test_load_accounts_by_host_and_clear() {
+        let store = RedisStore::new("redis://localhost:6380/1".to_string()).await;
+
+        let account1 = Account {
+            email: "test1@test.com".to_string(),
+            password: "password1".to_string(),
+            mailbox: "INBOX".to_string(),
+            imap_host: "imap.test.com".to_string(),
+        };
+
+        let account2 = Account {
+            email: "test2@test.com".to_string(),
+            password: "password2".to_string(),
+            mailbox: "INBOX".to_string(),
+            imap_host: "imap.test.com".to_string(),
+        };
+
+        // Store accounts
+        store.store_account(account1.clone()).await.unwrap();
+        store.store_account(account2.clone()).await.unwrap();
+
+        // Load accounts by host
+        let accounts = store
+            .load_accounts_by_host("test.com".to_string())
+            .await
+            .unwrap();
+        assert_eq!(accounts.len(), 2);
+        assert_eq!(accounts.contains(&account1), true);
+        assert_eq!(accounts.contains(&account2), true);
+
+        // Clear host accounts
+        store
+            .clear_host_accounts("test.com".to_string())
+            .await
+            .unwrap();
+        assert_eq!(
+            store
+                .load_accounts_by_host("test.com".to_string())
+                .await
+                .unwrap()
+                .len(),
+            0
+        );
     }
 }

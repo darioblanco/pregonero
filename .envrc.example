@@ -12,6 +12,8 @@ export IMAP_MAILBOX=inbox
 
 export LOG_LEVEL=info
 
-export REDIS_URL=localhost
+export REDIS_HOST=localhost
+
+export REDIS_PORT=6379
 
 export VERSION=experimental
