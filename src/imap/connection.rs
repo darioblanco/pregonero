@@ -1,12 +1,13 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
+use async_imap::extensions::idle::IdleResponse::{ManualInterrupt, NewData, Timeout};
 use async_native_tls::TlsStream;
 use futures::{StreamExt, TryStreamExt};
 use itertools::Itertools;
 
 use async_imap::{imap_proto::builders::command::fetch, types::Name, Session};
-use tokio::net::TcpStream;
+use tokio::{net::TcpStream, task, time::sleep};
 use tracing::{debug, error};
 
 use crate::{
@@ -16,7 +17,7 @@ use crate::{
 
 use super::parsers;
 
-async fn get_session(account: &Account) -> Result<Session<TlsStream<TcpStream>>> {
+async fn get_session(account: Account) -> Result<Session<TlsStream<TcpStream>>> {
     let imap_addr = (account.imap_host.clone(), 993);
     let tcp_stream = TcpStream::connect(imap_addr).await?;
     let tls = async_native_tls::TlsConnector::new();
@@ -49,9 +50,9 @@ async fn get_session(account: &Account) -> Result<Session<TlsStream<TcpStream>>>
     return Ok(imap_session);
 }
 
-// pub async fn get_mailboxes(imap_session: Session<TlsStream<TcpStream>>) {
+// pub async fn get_mailboxes(imap_session: Session<TlsStream<TcpStream>>) -> Result<()> {
 //     let mailboxes_stream = imap_session.list(Some(""), Some("*")).await;
-//     let mailboxes: Vec<Result<Name, async_imap::error::Error>> = mailboxes_stream.collect().await;
+//     let mailboxes: Vec<Result<Name, async_imap::error::Error>> = mailboxes_stream.collect().await?;
 
 //     for mailbox in mailboxes {
 //         match mailbox {
@@ -59,18 +60,80 @@ async fn get_session(account: &Account) -> Result<Session<TlsStream<TcpStream>>>
 //             Err(e) => debug!("error: {:?}", e),
 //         }
 //     }
+//     Ok(())
 // }
 
-pub async fn fetch_inbox(
+pub async fn idle_inbox(
     account: Account,
     store: Arc<dyn store::Store>,
     queue: Arc<dyn queue::Queue>,
 ) -> Result<()> {
-    // the client we have here is unauthenticated.
-    // to do anything useful with the e-mails, we need to log in
-    let mut imap_session = get_session(&account).await?;
-    debug!("-- logged in with account {}", &account.email);
+    // Idle for new email messages (unless interrupted or timed out)
+    loop {
+        let mut imap_session = get_session(account.clone()).await?;
+        debug!(
+            "-- logged in with account {}",
+            account.clone().email.clone()
+        );
 
+        imap_session =
+            fetch_inbox(imap_session, account.clone(), store.clone(), queue.clone()).await?;
+
+        debug!("-- initializing idle");
+        let mut idle = imap_session.idle();
+        idle.init().await?;
+
+        debug!("-- idle async wait");
+        let (idle_wait, interrupt) = idle.wait();
+
+        let timeout = 15; // 1500s = 25min
+        task::spawn(async move {
+            debug!("-- thread: waiting '{}' for {} seconds", "email", timeout);
+            sleep(Duration::from_secs(timeout)).await;
+            debug!(
+                "-- thread: waited for '{}' for {} seconds, now interrupting idle",
+                "email", timeout
+            );
+            drop(interrupt);
+        });
+
+        let idle_result = idle_wait.await?;
+        match idle_result {
+            ManualInterrupt => {
+                // This could be a timeout from the client (our sleep function)
+                debug!("-- IDLE manually interrupted");
+                continue; // restart infinite loop, fetching at the beginning of the loop
+            }
+            Timeout => {
+                // This is a timeout from the server
+                debug!("-- IDLE timed out");
+                continue; // restart infinite loop, fetching at the beginning of the loop
+            }
+            NewData(data) => {
+                // The mailbox has received an update, it is time to trigger fetch
+                let s = String::from_utf8(data.borrow_owner().to_vec()).unwrap();
+                debug!("-- IDLE data (owner):\n{}", s); // Not relevant, information about the server
+                debug!("-- IDLE data (dependent):\n{:?}", data.borrow_dependent());
+            }
+        }
+
+        // return the session after an idle event is received
+        debug!("-- idle DONE");
+        imap_session = idle.done().await?;
+
+        // be nice to the server and log out
+        debug!("-- logging out");
+        imap_session.logout().await?;
+    }
+}
+
+async fn fetch_inbox(
+    mut imap_session: Session<TlsStream<TcpStream>>,
+    account: Account,
+    store: Arc<dyn store::Store>,
+    queue: Arc<dyn queue::Queue>,
+) -> Result<Session<TlsStream<TcpStream>>> {
+    // Fetch unread email messages
     let mut last_sequence = store.load_last_sequence(account.email.clone()).await?;
     let sequence_set = format!("{}:*", last_sequence);
     let query = "(FLAGS INTERNALDATE RFC822.SIZE BODY.PEEK[TEXT] ENVELOPE UID)";
@@ -104,7 +167,7 @@ pub async fn fetch_inbox(
         }
     }
     store
-        .store_last_sequence(account.email, last_sequence)
+        .store_last_sequence(account.email.clone(), last_sequence)
         .await?;
 
     debug!(
@@ -113,24 +176,5 @@ pub async fn fetch_inbox(
         skipped,
         raw_messages.len()
     );
-
-    Ok(())
-}
-
-pub async fn idle_inbox(
-    account: Account,
-    store: Arc<dyn store::Store>,
-    queue: Arc<dyn queue::Queue>,
-) -> Result<()> {
-    let imap_session = get_session(&account).await?;
-    debug!("-- logged in with account {}", &account.email);
-
-    let mut handle = imap_session.idle();
-    let _ = handle.init().await;
-    loop {
-        let _ = handle.wait();
-        // Fetch new messages since the last sequence id
-        // ... Similar to the previous fetch code ...
-        fetch_inbox(account.clone(), store.clone(), queue.clone()).await?;
-    }
+    Ok(imap_session)
 }

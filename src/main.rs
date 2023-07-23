@@ -42,24 +42,17 @@ pub async fn main() -> Result<()> {
     info!("Queue set up at {}", config.redis_server);
 
     let accounts_res = store.load_accounts_by_host("icloud.com".to_string()).await;
-    let mut fetch_tasks = vec![];
-    // let mut idle_tasks: Vec<_> = vec![];
+    let mut tasks = vec![];
     match accounts_res {
         Ok(accounts) => {
             debug!("Accounts loaded: {:?}", accounts);
             for account in accounts {
-                let fetch_task = task::spawn(imap::fetch_inbox(
+                let task = task::spawn(imap::idle_inbox(
                     account.clone(),
                     store.clone(),
                     queue.clone(),
                 ));
-                fetch_tasks.push(fetch_task);
-                // let idle_task = task::spawn(imap::idle_inbox(
-                //     account.clone(),
-                //     store.clone(),
-                //     queue.clone(),
-                // ));
-                // idle_tasks.push(idle_task);
+                tasks.push(task);
             }
         }
         Err(e) => {
@@ -67,23 +60,14 @@ pub async fn main() -> Result<()> {
         }
     }
 
-    // Await all fetch tasks to finish
-    for task in fetch_tasks {
+    // Fetch tasks are executing indefinitely as they have an infinite loop each
+    // Each account has a fetch task, so this can scale to a lot of accounts
+    for task in tasks {
         if let Err(e) = task.await {
             // Handle errors gracefully
             error!("Error in task: {:?}", e);
         }
     }
-
-    // // Await all idle tasks indefinitely
-    // loop {
-    //     for task in &mut idle_tasks {
-    //         if let Err(e) = task.await {
-    //             // Handle errors gracefully
-    //             error!("Error in idle task: {:?}", e);
-    //         }
-    //     }
-    // }
 
     Ok(())
 }
