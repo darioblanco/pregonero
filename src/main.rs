@@ -1,7 +1,7 @@
 use queue::Queue;
 use std::sync::Arc;
 use store::Store;
-
+use tokio::task;
 use tracing::{debug, error, info};
 
 use anyhow::Result;
@@ -42,32 +42,24 @@ pub async fn main() -> Result<()> {
     info!("Queue set up at {}", config.redis_server);
 
     let accounts_res = store.load_accounts_by_host("icloud.com".to_string()).await;
+    let mut tasks = vec![];
     match accounts_res {
         Ok(accounts) => {
             debug!("Accounts loaded: {:?}", accounts);
             for account in accounts {
-                let res = imap::fetch_inbox(
-                    &account.imap_host,
-                    &account.email,
-                    &account.password,
-                    &account.mailbox,
-                )
-                .await;
-
-                match res {
-                    Ok(messages) => {
-                        for email_message in messages {
-                            queue
-                                .publish_message(queue::QueueMessage { email_message })
-                                .await?;
-                        }
-                    }
-                    Err(e) => error!("Error while fetching inbox: {:?}", e),
-                }
+                let task = task::spawn(imap::fetch_inbox(account, store.clone(), queue.clone()));
+                tasks.push(task);
             }
         }
         Err(e) => {
-            error!("Error while loading accounts for 'icloud.com': {:?}", e);
+            error!("Error while loading accounts: {:?}", e);
+        }
+    }
+
+    // Await all tasks to finish
+    for task in tasks {
+        if let Err(e) = task.await {
+            // Handle errors gracefully
         }
     }
 

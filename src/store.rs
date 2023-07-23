@@ -25,7 +25,7 @@ impl fmt::Display for Account {
 }
 
 #[async_trait]
-pub trait Store {
+pub trait Store: Send + Sync {
     /// Get alist of accounts from the account store that matches a pattern.
     async fn load_accounts_by_host(&self, host: String) -> Result<Vec<Account>>;
 

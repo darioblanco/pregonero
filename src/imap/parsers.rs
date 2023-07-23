@@ -12,6 +12,7 @@ pub struct EmailMessage {
     pub senders: Vec<Address>,
     pub subject: String,
     pub body: String,
+    pub seq_id: u32,
 }
 
 impl fmt::Display for EmailMessage {
@@ -48,8 +49,17 @@ pub fn parse_message(account: String, raw_message: &Fetch) -> Option<EmailMessag
         senders: Vec::<Address>::new(),
         subject: "".to_string(),
         body: "".to_string(),
+        seq_id: 0,
     };
 
+    match raw_message.uid {
+        Some(uid) => message.seq_id = uid,
+        None => {
+            error!("message did not have a uid!");
+            // Unable to parse any type of message, go to the next one
+            return None;
+        }
+    }
     match raw_message.text() {
         Some(text) => message.body = parse_text(text),
         None => {
@@ -69,7 +79,7 @@ pub fn parse_message(account: String, raw_message: &Fetch) -> Option<EmailMessag
             return None;
         }
     }
-    debug!("message parsed: {}", message);
+    debug!("message {} parsed", message.seq_id);
     return Some(message);
 }
 

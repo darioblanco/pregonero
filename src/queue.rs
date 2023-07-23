@@ -19,7 +19,7 @@ impl fmt::Display for QueueMessage {
 }
 
 #[async_trait]
-pub trait Queue {
+pub trait Queue: Send + Sync {
     /// Publish a message to the queue.
     async fn publish_message(&self, message: QueueMessage) -> Result<()>;
 }
