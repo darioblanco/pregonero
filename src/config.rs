@@ -13,13 +13,15 @@ impl Environment for SystemEnvironment {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum AppEnv {
+    Development,
+    Production,
+}
+
 #[derive(Clone, Debug)]
 pub struct Config {
-    pub imap_host: String,
-    pub imap_port: u16,
-    pub imap_username: String,
-    pub imap_password: String,
-    pub imap_mailbox: String,
+    pub app_env: AppEnv,
     pub log_level: Level,
     pub redis_server: String,
     pub version: String,
@@ -27,23 +29,7 @@ pub struct Config {
 
 impl Config {
     pub fn from_env<T: Environment>(env: &T) -> Config {
-        let imap_host = env
-            .get_var("IMAP_HOST")
-            .unwrap_or_else(|_| "localhost".to_string());
-        let imap_port: u16 = env
-            .get_var("IMAP_PORT")
-            .unwrap_or_else(|_| "993".to_string())
-            .parse()
-            .unwrap_or(993);
-        let imap_username = env
-            .get_var("IMAP_USERNAME")
-            .unwrap_or_else(|_| "".to_string());
-        let imap_password = env
-            .get_var("IMAP_PASSWORD")
-            .unwrap_or_else(|_| "".to_string());
-        let imap_mailbox = env
-            .get_var("IMAP_MAILBOX")
-            .unwrap_or_else(|_| "inbox".to_string());
+        let app_env = env.get_var("ENV").unwrap_or_else(|_| "dev".to_string());
         let log_level = env
             .get_var("LOG_LEVEL")
             .unwrap_or_else(|_| "info".to_string());
@@ -63,6 +49,10 @@ impl Config {
             .parse()
             .expect("Failed to parse REDIS_HOST and REDIS_PORT");
 
+        let app_env = match app_env.to_lowercase().as_str() {
+            "prod" => AppEnv::Production,
+            _ => AppEnv::Development,
+        };
         let log_level = match log_level.to_lowercase().as_str() {
             "trace" => Level::TRACE,
             "debug" => Level::DEBUG,
@@ -73,11 +63,7 @@ impl Config {
         };
 
         Config {
-            imap_host,
-            imap_port,
-            imap_username,
-            imap_password,
-            imap_mailbox,
+            app_env,
             log_level,
             redis_server,
             version,
@@ -86,11 +72,7 @@ impl Config {
 
     pub fn from_params(version: String) -> Config {
         Config {
-            imap_host: "127.0.0.1".to_string(),
-            imap_port: 993,
-            imap_username: "username".to_string(),
-            imap_password: "password".to_string(),
-            imap_mailbox: "inbox".to_string(),
+            app_env: AppEnv::Development,
             log_level: Level::INFO,
             redis_server: "redis://127.0.0.1:6359".to_string().parse().unwrap(),
             version,
@@ -118,22 +100,14 @@ mod tests {
     #[test]
     fn test_config_from_env() {
         let mut vars = std::collections::HashMap::new();
-        vars.insert("IMAP_HOST".to_string(), "myimaphost".to_string());
-        vars.insert("IMAP_PORT".to_string(), "143".to_string());
-        vars.insert("IMAP_USERNAME".to_string(), "myuser".to_string());
-        vars.insert("IMAP_PASSWORD".to_string(), "secret".to_string());
-        vars.insert("IMAP_MAILBOX".to_string(), "mymailbox".to_string());
+        vars.insert("ENV".to_string(), "prod".to_string());
         vars.insert("LOG_LEVEL".to_string(), "warn".to_string());
         vars.insert("REDIS_HOST".to_string(), "myredishost".to_string());
         vars.insert("REDIS_PORT".to_string(), "6359".to_string());
         vars.insert("VERSION".to_string(), "myversion".to_string());
         let env = MockEnvironment { vars };
         let config = Config::from_env(&env);
-        assert_eq!(config.imap_host, "myimaphost".to_string());
-        assert_eq!(config.imap_port, 143);
-        assert_eq!(config.imap_username, "myuser");
-        assert_eq!(config.imap_password, "secret");
-        assert_eq!(config.imap_mailbox, "mymailbox");
+        assert_eq!(config.app_env, AppEnv::Production);
         assert_eq!(config.log_level, Level::WARN);
         assert_eq!(
             config.redis_server.to_string(),
@@ -145,11 +119,7 @@ mod tests {
     #[test]
     fn test_config_from_params() {
         let config = Config::from_params("test".to_string());
-        assert_eq!(config.imap_host, "127.0.0.1".to_string());
-        assert_eq!(config.imap_port, 993);
-        assert_eq!(config.imap_username, "username");
-        assert_eq!(config.imap_password, "password");
-        assert_eq!(config.imap_mailbox, "inbox");
+        assert_eq!(config.app_env, AppEnv::Development);
         assert_eq!(config.log_level, Level::INFO);
         assert_eq!(
             config.redis_server.to_string(),

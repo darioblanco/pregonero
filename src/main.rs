@@ -7,6 +7,7 @@ use tracing::{debug, error, info};
 use anyhow::Result;
 
 pub mod config;
+pub mod fixtures;
 pub mod imap;
 pub mod queue;
 pub mod store;
@@ -26,31 +27,22 @@ pub async fn main() -> Result<()> {
 
     info!("Initialized config with {:?}", config);
 
-    info!("Loading Store...");
+    info!("Setting store in {}...", config.redis_server);
     let store: Arc<dyn Store> =
         Arc::new(store::RedisStore::new(config.redis_server.to_string()).await);
-    debug!("Load test account into the store");
-    let stored_account = store
-        .store_account(store::Account {
-            email: config.imap_username,
-            password: config.imap_password,
-            mailbox: config.imap_mailbox,
-            imap_host: config.imap_host,
-        })
-        .await;
-    match stored_account {
-        Ok(stored_account) => debug!("Account stored: {:?}", stored_account),
-        Err(e) => {
-            error!("Error while storing test account: {:?}", e);
-            return Err(e);
-        }
-    }
-    info!("Stored and accounts loaded.");
+    info!("Store set up at {}", config.redis_server);
 
-    info!("Loading Queue...");
+    // Load accounts only if test environment is given
+    if config.app_env == config::AppEnv::Development {
+        info!("Loading test accounts...");
+        fixtures::load_accounts(&store).await;
+        info!("Test accounts loaded from the fixtures file");
+    }
+
+    info!("Setting queue in {}...", config.redis_server);
     let queue: Arc<dyn Queue> =
         Arc::new(queue::RedisQueue::new(config.redis_server.to_string()).await);
-    info!("Connected to Queue");
+    info!("Queue set up at {}", config.redis_server);
 
     let accounts_res = store.load_accounts_by_host("icloud.com".to_string()).await;
     match accounts_res {
