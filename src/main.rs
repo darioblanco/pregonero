@@ -19,11 +19,8 @@ pub async fn main() -> Result<()> {
     // install global collector configured based on RUST_LOG env var.
     let filter = tracing_subscriber::EnvFilter::from_default_env()
         .add_directive(format!("pregonero={}", config.log_level).parse().unwrap())
-        .add_directive("html2text=info".parse().unwrap());
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        // .with_max_level(config.log_level)
-        .init();
+        .add_directive("html2text=error".parse().unwrap());
+    tracing_subscriber::fmt().with_env_filter(filter).init();
 
     info!("Initialized config with {:?}", config);
 

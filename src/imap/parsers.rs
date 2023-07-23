@@ -2,7 +2,7 @@ use async_imap::{imap_proto::Envelope, types::Fetch};
 use itertools::Itertools;
 use serde_derive::{Deserialize, Serialize};
 use std::fmt;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 use super::codecs;
 
@@ -151,19 +151,28 @@ fn parse_text(text: &[u8]) -> String {
             }
         }
         Err(e) => {
-            error!("Unable to parse email with mailparser: {}", e);
+            warn!(
+                "Unable to parse email with mailparser: {}. Trying manual parsing...",
+                e
+            );
         }
     }
 
     // Try manual parsing if there is a mailparse error
-    let text = std::str::from_utf8(text)
-        .expect("message was not valid utf-8")
-        .to_string();
-    if text.contains("<!DOCTYPE html>") || text.contains("<html>") {
-        // Strip HTML (and do not wrap the lines)
-        let text = html2text::from_read(text.as_bytes(), usize::MAX);
-        return text;
-    } else {
-        return text;
+    let utf_result = std::str::from_utf8(text);
+    match utf_result {
+        Ok(utf_text) => {
+            if utf_text.contains("<!DOCTYPE html>") || utf_text.contains("<html>") {
+                // Strip HTML (and do not wrap the lines)
+                let text = html2text::from_read(utf_text.as_bytes(), usize::MAX);
+                return text;
+            } else {
+                return utf_text.to_string();
+            }
+        }
+        Err(e) => {
+            error!("Unable to decode body with UTF8: {}", e);
+            return "".to_string();
+        }
     }
 }
