@@ -40,6 +40,12 @@ pub trait Store: Send + Sync {
 
     /// Destroy all accounts belonging to a host
     async fn clear_host_accounts(&self, host: String) -> Result<()>;
+
+    /// Destroy all accounts belonging to a host
+    async fn load_last_sequence(&self, email: String) -> Result<u32>;
+
+    /// Destroy all accounts belonging to a host
+    async fn store_last_sequence(&self, email: String, last_sequence: u32) -> Result<()>;
 }
 
 #[derive(Clone, Debug)]
@@ -154,6 +160,28 @@ impl Store for RedisStore {
             }
         }
 
+        Ok(())
+    }
+
+    async fn load_last_sequence(&self, email: String) -> Result<u32> {
+        debug!("Load last sequence for email '{}'", email);
+        let key = format!("sequence:{}", email);
+        let mut con = self.redis_client.get_async_connection().await.unwrap();
+        let last_sequence: Option<String> = con.get(&key).await.unwrap();
+        match last_sequence {
+            Some(last_sequence_string) => match last_sequence_string.parse::<u32>() {
+                Ok(last_sequence) => Ok(last_sequence),
+                Err(_) => Ok(0),
+            },
+            None => Ok(0),
+        }
+    }
+
+    async fn store_last_sequence(&self, email: String, last_sequence: u32) -> Result<()> {
+        debug!("Store last sequence {} for email {}", email, last_sequence);
+        let key = format!("sequence:{}", email);
+        let mut con = self.redis_client.get_async_connection().await.unwrap();
+        con.set::<_, _, ()>(&key, last_sequence).await.unwrap();
         Ok(())
     }
 }

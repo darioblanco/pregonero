@@ -5,7 +5,7 @@ use async_native_tls::TlsStream;
 use futures::{StreamExt, TryStreamExt};
 use itertools::Itertools;
 
-use async_imap::{types::Name, Session};
+use async_imap::{imap_proto::builders::command::fetch, types::Name, Session};
 use tokio::net::TcpStream;
 use tracing::{debug, error};
 
@@ -16,23 +16,36 @@ use crate::{
 
 use super::parsers;
 
-pub async fn get_session(
-    imap_server: &str,
-    login: &str,
-    password: &str,
-) -> Result<Session<TlsStream<TcpStream>>> {
-    let imap_addr = (imap_server, 993);
+async fn get_session(account: &Account) -> Result<Session<TlsStream<TcpStream>>> {
+    let imap_addr = (account.imap_host.clone(), 993);
     let tcp_stream = TcpStream::connect(imap_addr).await?;
     let tls = async_native_tls::TlsConnector::new();
-    let tls_stream = tls.connect(imap_server, tcp_stream).await?;
+    let tls_stream = tls.connect(account.imap_host.clone(), tcp_stream).await?;
 
     let client = async_imap::Client::new(tls_stream);
-    debug!("-- connected to {}:{}", imap_addr.0, imap_addr.1);
+    debug!("-- connected to {}:{}", account.imap_host, 993);
 
     // the client we have here is unauthenticated.
     // to do anything useful with the e-mails, we need to log in
-    let imap_session = client.login(login, password).await.map_err(|e| e.0)?;
-    debug!("-- logged in a {}", login);
+    let mut imap_session = client
+        .login(account.email.clone(), account.password.clone())
+        .await
+        .map_err(|e| e.0)?;
+    debug!("-- logged in a {}", account.email);
+
+    let server_capabilities = imap_session.capabilities().await?;
+    debug!(
+        "-- Advertised server capabilities: {:?}",
+        server_capabilities
+            .iter()
+            .map(|s| format!("{:?}", s))
+            .join(", ")
+    );
+
+    // Select the INBOX mailbox
+    imap_session.select(account.mailbox.clone()).await?;
+    debug!("-- INBOX selected");
+
     return Ok(imap_session);
 }
 
@@ -55,34 +68,19 @@ pub async fn fetch_inbox(
 ) -> Result<()> {
     // the client we have here is unauthenticated.
     // to do anything useful with the e-mails, we need to log in
-    let mut imap_session =
-        get_session(&account.imap_host, &account.email, &account.password).await?;
+    let mut imap_session = get_session(&account).await?;
     debug!("-- logged in with account {}", &account.email);
 
-    // we want to fetch the first email in the INBOX mailbox
-    imap_session.select(&account.mailbox).await?;
-    debug!("-- INBOX selected");
-
-    let server_capabilities = imap_session.capabilities().await?;
+    let mut last_sequence = store.load_last_sequence(account.email.clone()).await?;
+    let sequence_set = format!("{}:*", last_sequence);
+    let query = "(FLAGS INTERNALDATE RFC822.SIZE BODY.PEEK[TEXT] ENVELOPE UID)";
     debug!(
-        "-- Advertised server capabilities: {:?}",
-        server_capabilities
-            .iter()
-            .map(|s| format!("{:?}", s))
-            .join(", ")
+        "Fetching emails for '{}' with sequence set '{}' and query '{}'",
+        account.email.clone(),
+        sequence_set,
+        query
     );
-
-    // fetch message number 1 in this mailbox, along with its RFC822 field.
-    // RFC 822 dictates the format of the body of e-mails
-    // let messages_stream = imap_session.fetch("1", "RFC822").await?;
-
-    // fetch all messages from the inbox (1:*)
-    let messages_stream = imap_session
-        .fetch(
-            format!("{}:*", 1), // TODO - load last sequence id from the store
-            "(FLAGS INTERNALDATE RFC822.SIZE BODY.PEEK[TEXT] ENVELOPE UID)",
-        )
-        .await?;
+    let messages_stream = imap_session.fetch(sequence_set, query).await?;
     let raw_messages: Vec<_> = messages_stream.try_collect().await?;
     let mut parsed = 0;
     let mut skipped = 0;
@@ -90,13 +88,14 @@ pub async fn fetch_inbox(
         let message = parsers::parse_message(account.email.clone(), raw_message);
         match message {
             Some(message) => {
+                last_sequence = message.seq_id;
                 queue
                     .publish_message(queue::QueueMessage {
                         email_message: message,
                     })
                     .await?;
                 parsed += 1;
-                debug!("pushed message to queue");
+                // debug!("pushed message to queue");
             }
             None => {
                 error!("unable to parse message (skipped).");
@@ -104,6 +103,9 @@ pub async fn fetch_inbox(
             }
         }
     }
+    store
+        .store_last_sequence(account.email, last_sequence)
+        .await?;
 
     debug!(
         "--  parsed {} | skipped {} | total {}",
@@ -112,29 +114,23 @@ pub async fn fetch_inbox(
         raw_messages.len()
     );
 
-    // Use idle() to listen for updates continuously
-    let mut handle = imap_session.idle();
-    let _ = handle.init().await;
-    let _ = handle.wait();
-
     Ok(())
 }
 
-// // Function to listen for updates on an IMAP account
-// async fn listen_for_updates(
-//     imap_session: Session<TlsStream<TcpStream>>,
-//     mailbox: &str,
-//     last_seq_id: u32,
-// ) -> Result<()> {
-//     // Fetch the new messages since the last sequential ID
-//     let mailbox = format!("{}/{}", mailbox, last_seq_id + 1);
-//     let fetch_result = imap_session.fetch(mailbox, "(FLAGS BODY.PEEK[])").await?;
-//     for message in fetch_result {
-//         // Process the new messages
-//     }
+pub async fn idle_inbox(
+    account: Account,
+    store: Arc<dyn store::Store>,
+    queue: Arc<dyn queue::Queue>,
+) -> Result<()> {
+    let imap_session = get_session(&account).await?;
+    debug!("-- logged in with account {}", &account.email);
 
-//     // Use idle() to listen for updates continuously
-//     let handler = imap_session.idle();
-
-//     Ok(())
-// }
+    let mut handle = imap_session.idle();
+    let _ = handle.init().await;
+    loop {
+        let _ = handle.wait();
+        // Fetch new messages since the last sequence id
+        // ... Similar to the previous fetch code ...
+        fetch_inbox(account.clone(), store.clone(), queue.clone()).await?;
+    }
+}

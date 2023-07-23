@@ -79,7 +79,7 @@ pub fn parse_message(account: String, raw_message: &Fetch) -> Option<EmailMessag
             return None;
         }
     }
-    debug!("message {} parsed", message.seq_id);
+    // debug!("message {} parsed", message.seq_id);
     return Some(message);
 }
 

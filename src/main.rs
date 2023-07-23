@@ -42,13 +42,24 @@ pub async fn main() -> Result<()> {
     info!("Queue set up at {}", config.redis_server);
 
     let accounts_res = store.load_accounts_by_host("icloud.com".to_string()).await;
-    let mut tasks = vec![];
+    let mut fetch_tasks = vec![];
+    // let mut idle_tasks: Vec<_> = vec![];
     match accounts_res {
         Ok(accounts) => {
             debug!("Accounts loaded: {:?}", accounts);
             for account in accounts {
-                let task = task::spawn(imap::fetch_inbox(account, store.clone(), queue.clone()));
-                tasks.push(task);
+                let fetch_task = task::spawn(imap::fetch_inbox(
+                    account.clone(),
+                    store.clone(),
+                    queue.clone(),
+                ));
+                fetch_tasks.push(fetch_task);
+                // let idle_task = task::spawn(imap::idle_inbox(
+                //     account.clone(),
+                //     store.clone(),
+                //     queue.clone(),
+                // ));
+                // idle_tasks.push(idle_task);
             }
         }
         Err(e) => {
@@ -56,12 +67,23 @@ pub async fn main() -> Result<()> {
         }
     }
 
-    // Await all tasks to finish
-    for task in tasks {
+    // Await all fetch tasks to finish
+    for task in fetch_tasks {
         if let Err(e) = task.await {
             // Handle errors gracefully
+            error!("Error in task: {:?}", e);
         }
     }
+
+    // // Await all idle tasks indefinitely
+    // loop {
+    //     for task in &mut idle_tasks {
+    //         if let Err(e) = task.await {
+    //             // Handle errors gracefully
+    //             error!("Error in idle task: {:?}", e);
+    //         }
+    //     }
+    // }
 
     Ok(())
 }
