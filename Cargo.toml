@@ -8,6 +8,7 @@ edition = "2021"
 anyhow = "1"
 async-imap = { version = "0.9.0", default-features = false, features = ["runtime-tokio"] }
 async-native-tls = { version = "0.5.0", default-features = false, features = ["runtime-tokio"] }
+async-trait = "0.1.72"
 encoding = "0.2.33"
 futures = "0.3.28"
 html2text = "0.6.0"
@@ -16,6 +17,9 @@ mailparse = "0.14.0"
 quoted_printable = "0.5.0"
 redis = { version = "0.23", features = ["aio", "tokio-comp"] }
 regex = "1.9.1"
+serde = "1.0.174"
+serde_derive = "1.0.174"
+serde_json = "1.0.103"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
