@@ -1,0 +1,79 @@
+name: test
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "**.rs"
+      - Cargo.lock
+      - Cargo.toml
+      - Containerfile
+      - Makefile
+      - .github/workflows/test.yaml
+    tags:
+      - "v*"
+  pull_request:
+    paths:
+      - "**.rs"
+      - Cargo.lock
+      - Cargo.toml
+      - Containerfile
+      - Makefile
+      - .github/workflows/test.yaml
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:6-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6380:6379
+    steps:
+      - name: Checkout current git repository
+        uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: Install requirements
+        run: make install
+      - name: Test code
+        run: make test
+  draft_release:
+    if: github.ref == 'refs/heads/main'
+    needs:
+      - test
+    uses: darioblanco/.github/.github/workflows/release.yaml@v1
+    secrets:
+      repoAccessToken: ${{ secrets.REPO_ACCESS_TOKEN }}
+  deploy_to_staging:
+    if: github.ref == 'refs/heads/main'
+    needs:
+      - test
+    uses: darioblanco/.github/.github/workflows/deployment.yaml@v1
+    with:
+      author: ${{ github.event.pusher.name }}
+      description: ${{ toJSON(github.event.head_commit.message) }}
+      env: staging
+      name: fastapi-example
+      ref: ${{ github.ref }}
+    secrets:
+      repoAccessToken: ${{ secrets.REPO_ACCESS_TOKEN }}
+  deploy_to_prod:
+    if: github.ref_type == 'tag'
+    needs:
+      - test
+    uses: darioblanco/.github/.github/workflows/deployment.yaml@v1
+    with:
+      author: ${{ github.event.pusher.name }}
+      description: ${{ toJSON(github.event.head_commit.message) }}
+      env: prod
+      name: fastapi-example
+      ref: ${{ github.ref }}
+    secrets:
+      repoAccessToken: ${{ secrets.REPO_ACCESS_TOKEN }}

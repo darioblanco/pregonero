@@ -1,0 +1,34 @@
+build:
+  - "Makefile"
+  - "pyproject.toml"
+ci:
+  - ".github/workflows/*"
+deps:
+  - "poetry.lock"
+  - "renovate.json"
+deployment:
+  - ".dockerignore"
+  - "Containerfile"
+docs:
+  - "CODEOWNERS"
+  - "*.md"
+  - "**/*.md"
+json:
+  - "*.json"
+  - "**/*.json"
+shell:
+  - "*.sh"
+  - "**/*.sh"
+style:
+  - ".pre-commit-config.yaml"
+  - "./scripts/pre-commit-hook.sh"
+  - "./scripts/validate.sh"
+test:
+  - "**/test_*.py"
+  - "**/tests/*"
+  - "**/tests/**/*"
+yaml:
+  - "*.yaml"
+  - "*.yml"
+  - "**/*.yaml"
+  - "**/*.yml"
