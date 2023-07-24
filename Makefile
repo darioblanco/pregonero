@@ -15,6 +15,7 @@ help: ## list available commands
 
 format: init ## format the code
 	cargo fmt
+	prettier --write "**/*.{json,yaml,yml}"
 
 init: ## verify that all the required commands are already installed
 	@if [ -z "$$CI" ]; then \
@@ -25,6 +26,7 @@ init: ## verify that all the required commands are already installed
 			fi \
 		} ;\
 		cmd cargo; \
+		cmd prettier; \
 		cp .githooks/* .git/hooks/ ;\
 	fi
 
