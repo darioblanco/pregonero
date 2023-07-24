@@ -37,11 +37,5 @@ make build
 Run
 
 ```sh
-make run
-```
-
-Watch
-
-```sh
-make watch
+make start
 ```
