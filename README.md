@@ -1,5 +1,11 @@
 # pregonero
 
+[![container](https://github.com/darioblanco/pregonero/actions/workflows/container.yaml/badge.svg)](https://github.com/darioblanco/pregonero/actions/workflows/container.yaml)
+[![json](https://github.com/darioblanco/pregonero/actions/workflows/json.yaml/badge.svg)](https://github.com/darioblanco/pregonero/actions/workflows/json.yaml)
+[![test](https://github.com/darioblanco/pregonero/actions/workflows/test.yaml/badge.svg)](https://github.com/darioblanco/pregonero/actions/workflows/test.yaml)
+[![validate](https://github.com/darioblanco/pregonero/actions/workflows/validate.yaml/badge.svg)](https://github.com/darioblanco/pregonero/actions/workflows/validate.yaml)
+[![yaml](https://github.com/darioblanco/pregonero/actions/workflows/yaml.yaml/badge.svg)](https://github.com/darioblanco/pregonero/actions/workflows/yaml.yaml)
+
 Rust backend to connect to IMAP servers and process new email messages into a queue.
 
 A "pregonero" is a term from Spanish that translates to "town crier" in English.
