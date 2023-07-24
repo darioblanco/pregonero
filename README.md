@@ -1,6 +1,6 @@
 # pregonero
 
-Rust backend to connect to IMAP servers.
+Rust backend to connect to IMAP servers and process new email messages into a queue.
 
 A "pregonero" is a term from Spanish that translates to "town crier" in English.
 Historically, town criers were officials appointed by the local authorities to make
