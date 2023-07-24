@@ -43,9 +43,9 @@ impl fmt::Display for Address {
     }
 }
 
-pub fn parse_message(account: String, raw_message: &Fetch) -> Option<EmailMessage> {
+pub fn parse_message(email: &str, raw_message: &Fetch) -> Option<EmailMessage> {
     let mut message = EmailMessage {
-        account,
+        account: email.to_string(),
         senders: Vec::<Address>::new(),
         subject: "".to_string(),
         body: "".to_string(),

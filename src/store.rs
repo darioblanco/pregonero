@@ -12,6 +12,8 @@ pub struct Account {
     pub password: String,
     pub mailbox: String,   // INBOX by default
     pub imap_host: String, // TODO: could be detected depending on the @provider part of the username
+    pub idle_time_seconds: u64,
+    pub wait_time_seconds: u64,
 }
 
 impl fmt::Display for Account {
@@ -42,10 +44,10 @@ pub trait Store: Send + Sync {
     async fn clear_host_accounts(&self, host: String) -> Result<()>;
 
     /// Destroy all accounts belonging to a host
-    async fn load_last_sequence(&self, email: String) -> Result<u32>;
+    async fn load_last_sequence(&self, email: &str) -> Result<u32>;
 
     /// Destroy all accounts belonging to a host
-    async fn store_last_sequence(&self, email: String, last_sequence: u32) -> Result<()>;
+    async fn store_last_sequence(&self, email: &str, last_sequence: u32) -> Result<()>;
 }
 
 #[derive(Clone, Debug)]
@@ -163,7 +165,7 @@ impl Store for RedisStore {
         Ok(())
     }
 
-    async fn load_last_sequence(&self, email: String) -> Result<u32> {
+    async fn load_last_sequence(&self, email: &str) -> Result<u32> {
         debug!("Load last sequence for email '{}'", email);
         let key = format!("sequence:{}", email);
         let mut con = self.redis_client.get_async_connection().await.unwrap();
@@ -177,7 +179,7 @@ impl Store for RedisStore {
         }
     }
 
-    async fn store_last_sequence(&self, email: String, last_sequence: u32) -> Result<()> {
+    async fn store_last_sequence(&self, email: &str, last_sequence: u32) -> Result<()> {
         debug!("Store last sequence {} for email {}", email, last_sequence);
         let key = format!("sequence:{}", email);
         let mut con = self.redis_client.get_async_connection().await.unwrap();
@@ -199,6 +201,8 @@ mod tests {
             password: "password".to_string(),
             mailbox: "INBOX".to_string(),
             imap_host: "imap.test.com".to_string(),
+            idle_time_seconds: 15,
+            wait_time_seconds: 30,
         };
 
         // Store the account
@@ -215,6 +219,8 @@ mod tests {
         assert_eq!(loaded_account.password, account.password);
         assert_eq!(loaded_account.mailbox, account.mailbox);
         assert_eq!(loaded_account.imap_host, account.imap_host);
+        assert_eq!(loaded_account.idle_time_seconds, account.idle_time_seconds);
+        assert_eq!(loaded_account.wait_time_seconds, account.wait_time_seconds);
 
         // Destroy the account
         store.destroy_account(account.email.clone()).await.unwrap();
@@ -236,6 +242,8 @@ mod tests {
             password: "password1".to_string(),
             mailbox: "INBOX".to_string(),
             imap_host: "imap.test.com".to_string(),
+            idle_time_seconds: 15,
+            wait_time_seconds: 30,
         };
 
         let account2 = Account {
@@ -243,6 +251,8 @@ mod tests {
             password: "password2".to_string(),
             mailbox: "INBOX".to_string(),
             imap_host: "imap.test.com".to_string(),
+            idle_time_seconds: 15,
+            wait_time_seconds: 30,
         };
 
         // Store accounts
@@ -271,5 +281,23 @@ mod tests {
                 .len(),
             0
         );
+    }
+
+    #[tokio::test]
+    async fn test_store_and_load_last_sequence() {
+        let store = RedisStore::new("redis://localhost:6380/2".to_string()).await;
+
+        let email = "test@test.com".to_string();
+        let last_sequence = 42;
+
+        // Call store_last_sequence to store the value in Redis
+        store
+            .store_last_sequence(&email, last_sequence)
+            .await
+            .unwrap();
+
+        // Call load_last_sequence and check if the stored value is returned
+        let loaded_sequence = store.load_last_sequence(&email).await.unwrap();
+        assert_eq!(loaded_sequence, last_sequence);
     }
 }

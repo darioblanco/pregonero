@@ -6,7 +6,7 @@ use async_native_tls::TlsStream;
 use futures::{StreamExt, TryStreamExt};
 use itertools::Itertools;
 
-use async_imap::{imap_proto::builders::command::fetch, types::Name, Session};
+use async_imap::{types::Name, Session};
 use tokio::{net::TcpStream, task, time::sleep};
 use tracing::{debug, error};
 
@@ -17,7 +17,7 @@ use crate::{
 
 use super::parsers;
 
-async fn get_session(account: Account) -> Result<Session<TlsStream<TcpStream>>> {
+async fn get_session(account: &Account) -> Result<Session<TlsStream<TcpStream>>> {
     let imap_addr = (account.imap_host.clone(), 993);
     let tcp_stream = TcpStream::connect(imap_addr).await?;
     let tls = async_native_tls::TlsConnector::new();
@@ -70,34 +70,21 @@ async fn get_session(account: Account) -> Result<Session<TlsStream<TcpStream>>> 
     }
 }
 
-// pub async fn get_mailboxes(imap_session: Session<TlsStream<TcpStream>>) -> Result<()> {
-//     let mailboxes_stream = imap_session.list(Some(""), Some("*")).await;
-//     let mailboxes: Vec<Result<Name, async_imap::error::Error>> = mailboxes_stream.collect().await?;
-
-//     for mailbox in mailboxes {
-//         match mailbox {
-//             Ok(mailbox) => debug!("mailbox found: {:?}", mailbox.name()),
-//             Err(e) => debug!("error: {:?}", e),
-//         }
-//     }
-//     Ok(())
-// }
-
 pub async fn idle_inbox(
     account: Account,
     store: Arc<dyn store::Store>,
     queue: Arc<dyn queue::Queue>,
 ) -> Result<()> {
     loop {
-        // Idle for new email messages (unless interrupted or timed out)
-        let mut imap_session = get_session(account.clone()).await?;
-        debug!(
-            "-- logged in with account {}",
-            account.clone().email.clone()
-        );
+        // Allocate account to be used in the async block
+        let account = account.clone();
+
+        // Idle for new email messages (unless interrupted)
+        let mut imap_session = get_session(&account).await?;
+        debug!("-- logged in with account {}", account.email);
 
         imap_session =
-            fetch_inbox(imap_session, account.clone(), store.clone(), queue.clone()).await?;
+            fetch_inbox(imap_session, &account.email, store.clone(), queue.clone()).await?;
 
         debug!("-- initializing idle");
         let mut idle = imap_session.idle();
@@ -106,13 +93,15 @@ pub async fn idle_inbox(
         debug!("-- idle async wait");
         let (idle_wait, interrupt) = idle.wait();
 
-        let timeout = 15; // 1500s = 25min
         task::spawn(async move {
-            debug!("-- thread: waiting '{}' for {} seconds", "email", timeout);
-            sleep(Duration::from_secs(timeout)).await;
+            debug!(
+                "-- thread: waiting '{}' for {} seconds",
+                account.email, account.idle_time_seconds
+            );
+            sleep(Duration::from_secs(account.idle_time_seconds)).await;
             debug!(
                 "-- thread: waited for '{}' for {} seconds, now interrupting idle",
-                "email", timeout
+                account.email, account.idle_time_seconds
             );
             drop(interrupt);
         });
@@ -147,32 +136,30 @@ pub async fn idle_inbox(
 
         // Introduce a delay before the next iteration to avoid busy-waiting
         // This delay could be a bit longer to prevent bans, or even randomized
-        tokio::time::sleep(Duration::from_secs(30)).await;
+        tokio::time::sleep(Duration::from_secs(account.wait_time_seconds)).await;
     }
 }
 
 async fn fetch_inbox(
     mut imap_session: Session<TlsStream<TcpStream>>,
-    account: Account,
+    email: &str,
     store: Arc<dyn store::Store>,
     queue: Arc<dyn queue::Queue>,
 ) -> Result<Session<TlsStream<TcpStream>>> {
     // Fetch unread email messages
-    let mut last_sequence = store.load_last_sequence(account.email.clone()).await?;
+    let mut last_sequence = store.load_last_sequence(email).await?;
     let sequence_set = format!("{}:*", last_sequence);
     let query = "(FLAGS INTERNALDATE RFC822.SIZE BODY.PEEK[TEXT] ENVELOPE UID)";
     debug!(
         "Fetching emails for '{}' with sequence set '{}' and query '{}'",
-        account.email.clone(),
-        sequence_set,
-        query
+        email, sequence_set, query
     );
     let messages_stream = imap_session.fetch(sequence_set, query).await?;
     let raw_messages: Vec<_> = messages_stream.try_collect().await?;
     let mut parsed = 0;
     let mut skipped = 0;
     for raw_message in raw_messages.iter() {
-        let message = parsers::parse_message(account.email.clone(), raw_message);
+        let message = parsers::parse_message(email, raw_message);
         match message {
             Some(message) => {
                 last_sequence = message.seq_id;
@@ -190,9 +177,7 @@ async fn fetch_inbox(
             }
         }
     }
-    store
-        .store_last_sequence(account.email.clone(), last_sequence)
-        .await?;
+    store.store_last_sequence(email, last_sequence).await?;
 
     debug!(
         "--  parsed {} | skipped {} | total {}",
