@@ -1,0 +1,10 @@
+[
+  {
+    "email": "myname@myemail.com",
+    "password": "mypassword",
+    "mailbox": "INBOX",
+    "imap_host": "imap.myserver.com",
+    "idle_time_seconds": 15,
+    "wait_time_seconds": 30
+  }
+]
