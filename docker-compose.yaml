@@ -29,7 +29,7 @@ services:
   #################
 
   redis:
-    image: redis:6-alpine
+    image: redis:7-alpine
     environment:
       - ALLOW_EMPTY_PASSWORD=yes
     ports:
@@ -44,7 +44,7 @@ services:
     container_name: pregonero-redis
 
   redis-test:
-    image: redis:6-alpine
+    image: redis:7-alpine
     environment:
       - ALLOW_EMPTY_PASSWORD=yes
     ports:
