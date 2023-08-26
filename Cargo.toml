@@ -17,7 +17,7 @@ mailparse = "0.14.0"
 quoted_printable = "0.5.0"
 redis = { version = "0.23", features = ["aio", "tokio-comp"] }
 regex = "1.9.1"
-serde = "1.0.174"
+serde = "1.0.188"
 serde_derive = "1.0.174"
 serde_json = "1.0.103"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
