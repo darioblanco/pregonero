@@ -10,7 +10,7 @@ async-imap = { version = "0.9.0", default-features = false, features = ["runtime
 async-native-tls = { version = "0.5.0", default-features = false, features = ["runtime-tokio"] }
 async-trait = "0.1.72"
 encoding = "0.2.33"
-futures = "0.3.28"
+futures = "0.3.30"
 html2text = "0.6.0"
 itertools = "0.11.0"
 mailparse = "0.14.0"
